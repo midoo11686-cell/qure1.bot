@@ -1,22 +1,35 @@
 import os
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-import google.generativeai as genai
+import urllib.request
+import json
 
-# حفظ حالات المستخدمين
 user_data = {}
 
 # ⚠️ ضع هنا الـ ID الشخصي الخاص بك لتستقبل عليه إشعارات الدفع وصور الإيصالات
-ADMIN_ID 8684915103
+ADMIN_ID = 123456789  
 
 PRICE_PER_CHAPTER = 4 
 VODAFONE_CASH_NUM = "01129549934" 
 
-# إعداد محرك جوجل جيميناي للذكاء الاصطناعي
-# سنقوم بجلب مفتاح التشغيل الآمن تلقائياً من إعدادات ريلواي
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-pro')
+def ask_ai(prompt_text):
+    try:
+        # استخدام محرك ذكاء اصطناعي مفتوح ومجاني بدون الحاجة لمفاتيح مخفية
+        url = "https://pollinations.ai"
+        data = {
+            "messages": [
+                {"role": "system", "content": "أنت خبير لغة جافا سكريبت ومساعد لطلاب الصف الأول الثانوي في مصر على منصة Qureo التعليمية. قم بتقديم الأكواد والحلول النموذجية للتدريبات بشكل منسق وجاهز للنسخ."},
+                {"role": "user", "content": prompt_text}
+            ],
+            "model": "openai",
+            "json": False
+        }
+        req = urllib.request.Request(url, method="POST")
+        req.add_header("Content-Type", "application/json")
+        response = urllib.request.urlopen(req, data=json.dumps(data).encode("utf-8"), timeout=20)
+        return response.read().decode("utf-8")
+    except Exception as e:
+        return "عذراً، محرك الحلول مضغوط حالياً، من فضلك أعد إرسال الرسالة السابقة."
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -64,17 +77,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if step == 'solving_process':
         await update.message.reply_text("📥 جاري الدخول لفصلك على منصة Qureo واستخراج أكواد الجافا سكريبت النموذجية... ⏳")
-        try:
-            prompt = (
-                f"أنت خبير لغة جافا سكريبت ومساعد لطلاب الصف الأول الثانوي في مصر على منصة Qureo التعليمية. "
-                f"قم بتقديم الأكواد والحلول النموذجية المقالية والاختيارية للتدريبات والامتحانات بناءً على هذه البيانات المرسلة:\n {text}\n"
-                f"اكتب الأكواد بشكل منسق وجاهز للنسخ."
-            )
-            response = model.generate_content(prompt)
-            await update.message.reply_text(f"📝 إليك الحلول الجاهزة لنسخها في المنصة:\n\n{response.text}")
-            user_data[user_id]['step'] = 'activated' 
-        except Exception as e:
-            await update.message.reply_text("عذراً، محرك الحلول مضغوط حالياً، من فضلك أعد إرسال الرسالة السابقة.")
+        solution = ask_ai(text)
+        await update.message.reply_text(f"📝 إليك الحلول الجاهزة لنسخها في المنصة:\n\n{solution}")
+        user_data[user_id]['step'] = 'activated' 
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -83,15 +88,15 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             chat_id=ADMIN_ID,
             photo=update.message.photo[-1].file_id,
             caption=f"💰 إشعار تحويل جديد من الطالب: {user_id}\n"
-                    f"طلب حل عدد فصول: {user_data[user_id].get('chapters_count')}\n\n"
-                    f"للبدء في الحل وتفعيل الطالب، انسخ هذا الأمر وأرسله للبوت:\n"
+                    f"طلب حل عدد فصول: {user_data[user_id].get('chapters_count')}\n\n"f"للبدء في الحل وتفعيل الطالب، انسخ هذا الأمر وأرسله للبوت:\n"
                     f"/activate {user_id}"
         )
         await update.message.reply_text("📥 تم استلام إيصال التحويل بنجاح! جاري مراجعته والتحقق من وصول الأموال للمحفظة، وسيبدأ البوت بالحل فوراً خلال دقائق.")
+
 async def activate_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id == ADMIN_ID:
         try:
-            target_id = int(context.args[0])
+            target_id = int(context.args)
             user_data[target_id]['step'] = 'activated'
             await context.bot.send_message(
                 chat_id=target_id, 
