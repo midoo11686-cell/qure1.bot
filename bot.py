@@ -1,12 +1,13 @@
 import os
+import json
+import urllib.request
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-import urllib.request
-import json
 
+# حفظ حالات المستخدمين
 user_data = {}
 
-# ⚠️ ضع هنا الـ ID الشخصي الخاص بك لتستقبل عليه إشعارات الدفع وصور الإيصالات
+# ⚠️ ضع هنا الـ ID الشخصي الخاص بك لتستقبل عليه إشعارات الدفع
 ADMIN_ID = 8684915103
 
 PRICE_PER_CHAPTER = 4 
@@ -14,28 +15,27 @@ VODAFONE_CASH_NUM = "01129549934"
 
 def ask_ai(prompt_text):
     try:
-        # استخدام محرك ذكاء اصطناعي مفتوح ومجاني بدون الحاجة لمفاتيح مخفية
+        # اتصال مباشر وسريع بالذكاء الاصطناعي بدون مكتبات خارجية
         url = "https://pollinations.ai"
         data = {
             "messages": [
-                {"role": "system", "content": "أنت خبير لغة جافا سكريبت ومساعد لطلاب الصف الأول الثانوي في مصر على منصة Qureo التعليمية. قم بتقديم الأكواد والحلول النموذجية للتدريبات بشكل منسق وجاهز للنسخ."},
+                {"role": "system", "content": "أنت خبير لغة جافا سكريبت ومساعد لطلاب الصف الأول الثانوي في مصر على منصة Qureo التعليمية. قم بتقديم الأكواد والحلول النموذجية للتدريبات بشكل منسق وجاهز للنسخ في المنصة."},
                 {"role": "user", "content": prompt_text}
             ],
-            "model": "openai",
-            "json": False
+            "model": "openai"
         }
         req = urllib.request.Request(url, method="POST")
         req.add_header("Content-Type", "application/json")
-        response = urllib.request.urlopen(req, data=json.dumps(data).encode("utf-8"), timeout=20)
+        response = urllib.request.urlopen(req, data=json.dumps(data).encode("utf-8"), timeout=15)
         return response.read().decode("utf-8")
-    except Exception as e:
+    except:
         return "عذراً، محرك الحلول مضغوط حالياً، من فضلك أعد إرسال الرسالة السابقة."
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🤖 أهلاً بك في بوت حل تدريبات جافا سكريبت لمنصة Qureo التعليمية! 💻\n\n"
         f"💵 تكلفة حل الفصل الواحد هي {PRICE_PER_CHAPTER} جنيه فقط.\n"
-        "يرجى كتابة أرقام الفصول أو عدد الفصول التي تريد حلها الآن (مثال: فصل واحد أو اكتب رقم 3)."
+        "يرجى كتابة عدد الفصول التي تريد حلها الآن (اكتب الرقم مباشرة، مثلاً: 1 أو 2)."
     )
     user_data[update.effective_user.id] = {'step': 'get_chapters'}
 
@@ -49,9 +49,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     step = user_data[user_id].get('step')
 
     if step == 'get_chapters':
-        digits = [int(s) for s in text.split() if s.isdigit()]
-        chapters_count = digits[0] if digits else 1
-        
+        chapters_count = int(text) if text.isdigit() else 1
         total_price = chapters_count * PRICE_PER_CHAPTER
         user_data[user_id]['chapters_count'] = chapters_count
         user_data[user_id]['step'] = 'wait_payment'
@@ -61,7 +59,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"💰 إجمالي السعر المطلوب: {total_price} جنيه مصري.\n\n"
             f"📱 يرجى تحويل المبلغ إلى رقم فودافون كاش التالي:\n"
             f"{VODAFONE_CASH_NUM}\n\n"
-            f"⚠️ بعد تحويل الأموال، يرجى إرسال لقطة شاشة (Screenshot) واضحة للإيصال هنا لتفعيل حسابك والبدء في الحل."
+            f"⚠️ بعد تحويل الأموال، يرجى إرسال صورة إيصال التحويل هنا لتفعيل حسابك والبدء في الحل."
         )
         return
 
@@ -76,9 +74,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if step == 'solving_process':
-        await update.message.reply_text("📥 جاري الدخول لفصلك على منصة Qureo واستخراج أكواد الجافا سكريبت النموذجية... ⏳")
+        await update.message.reply_text("📥 جاري استخراج أكواد الجافا سكريبت النموذجية للمنصة... ⏳")
         solution = ask_ai(text)
-        await update.message.reply_text(f"📝 إليك الحلول الجاهزة لنسخها في المنصة:\n\n{solution}")
+        await update.message.reply_text(f"📝 إليك الحلول الجاهزة لنسخها:\n\n{solution}")
         user_data[user_id]['step'] = 'activated' 
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -87,24 +85,22 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_photo(
             chat_id=ADMIN_ID,
             photo=update.message.photo[-1].file_id,
-            caption=f"💰 إشعار تحويل جديد من الطالب: {user_id}\n"
-                    f"طلب حل عدد فصول: {user_data[user_id].get('chapters_count')}\n\n"f"للبدء في الحل وتفعيل الطالب، انسخ هذا الأمر وأرسله للبوت:\n"
-                    f"/activate {user_id}"
+            caption=f"💰 تحويل جديد من الطالب: {user_id}\n"
+                    f"للتفعيل أرسل للبوت:\n/activate {user_id}"
         )
-        await update.message.reply_text("📥 تم استلام إيصال التحويل بنجاح! جاري مراجعته والتحقق من وصول الأموال للمحفظة، وسيبدأ البوت بالحل فوراً خلال دقائق.")
+        await update.message.reply_text("📥 تم استلام إيصال التحويل! جاري مراجعته وتفعيل حسابك فوراً.")
 
-async def activate_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id == ADMIN_ID:
+async def activate_user(update: Update, context: ContextTypes.DEFAULT_TYPE):if update.effective_user.id == ADMIN_ID:
         try:
-            target_id = int(context.args)
+            target_id = int(context.args[0])
             user_data[target_id]['step'] = 'activated'
             await context.bot.send_message(
                 chat_id=target_id, 
-                text="✅ رائع! تأكدنا من وصول الأموال. من فضلك أرسل أي رسالة أو اضغط هنا ليطلب منك البوت بيانات حساب المنصة ويبدأ الحل فوراً!"
+                text="✅ تم تأكيد دفعك! من فضلك أرسل أي رسالة ليطلب منك البوت بيانات الحساب ويبدأ الحل فوراً!"
             )
-            await update.message.reply_text("👍 تم تفعيل الطالب بنجاح، وفتح محرك الحلول له.")
-        except Exception as e:
-            await update.message.reply_text("خطأ في صيغة الأمر، تأكد من كتابته كالتالي: /activate 1234567")
+            await update.message.reply_text("👍 تم تفعيل الطالب.")
+        except:
+            await update.message.reply_text("خطأ في الأمر. اكتبه هكذا: /activate 123456")
 
 def main():
     TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
