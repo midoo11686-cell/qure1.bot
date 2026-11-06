@@ -1,16 +1,22 @@
 import os
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-import g4f
+import google.generativeai as genai
 
-# حفظ حالات المستخدمين وبيانات طلباتهم
+# حفظ حالات المستخدمين
 user_data = {}
 
 # ⚠️ ضع هنا الـ ID الشخصي الخاص بك لتستقبل عليه إشعارات الدفع وصور الإيصالات
-ADMIN_ID = 8684915103
+ADMIN_ID 8684915103
 
-PRICE_PER_CHAPTER = 4 # سعر حل الفصل الواحد 4 جنيه
-VODAFONE_CASH_NUM = "01129549934" # رقم فودافون كاش الخاص بك
+PRICE_PER_CHAPTER = 4 
+VODAFONE_CASH_NUM = "01129549934" 
+
+# إعداد محرك جوجل جيميناي للذكاء الاصطناعي
+# سنقوم بجلب مفتاح التشغيل الآمن تلقائياً من إعدادات ريلواي
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+genai.configure(api_key=GEMINI_API_KEY)
+model = genai.GenerativeModel('gemini-pro')
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -29,11 +35,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     step = user_data[user_id].get('step')
 
-    # 1. استقبال طلب الفصول وحساب السعر بدقة
     if step == 'get_chapters':
-        # استخراج الأرقام من الرسالة لحساب عدد الفصول
         digits = [int(s) for s in text.split() if s.isdigit()]
-        chapters_count = digits[0] if digits else 1 # الافتراضي فصل واحد إذا لم يكتب رقماً واضحاً
+        chapters_count = digits[0] if digits else 1
         
         total_price = chapters_count * PRICE_PER_CHAPTER
         user_data[user_id]['chapters_count'] = chapters_count
@@ -44,11 +48,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"💰 إجمالي السعر المطلوب: {total_price} جنيه مصري.\n\n"
             f"📱 يرجى تحويل المبلغ إلى رقم فودافون كاش التالي:\n"
             f"{VODAFONE_CASH_NUM}\n\n"
-            f"⚠️ بعد تحويل الأموال، يرجى إرسال لقطة شاشة (Screenshot) واضحة لإيصال التحويل هنا لتفعيل حسابك والبدء في الحل."
+            f"⚠️ بعد تحويل الأموال، يرجى إرسال لقطة شاشة (Screenshot) واضحة للإيصال هنا لتفعيل حسابك والبدء في الحل."
         )
         return
 
-    # 2. طلب بيانات المنصة والبدء في الحل بالذكاء الاصطناعي بعد التفعيل فقط
     if step == 'activated':
         user_data[user_id]['step'] = 'solving_process'
         await update.message.reply_text(
@@ -59,7 +62,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # 3. معالجة الحل
     if step == 'solving_process':
         await update.message.reply_text("📥 جاري الدخول لفصلك على منصة Qureo واستخراج أكواد الجافا سكريبت النموذجية... ⏳")
         try:
@@ -68,21 +70,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"قم بتقديم الأكواد والحلول النموذجية المقالية والاختيارية للتدريبات والامتحانات بناءً على هذه البيانات المرسلة:\n {text}\n"
                 f"اكتب الأكواد بشكل منسق وجاهز للنسخ."
             )
-            response = g4f.ChatCompletion.create(
-                model=g4f.models.gpt_4,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            await update.message.reply_text(f"📝 إليك الحلول الجاهزة لنسخها في المنصة:\n\n{response}")
-            user_data[user_id]['step'] = 'activated' # يظل مفعلاً لإرسال باقي الفصول التي دفع ثمنها
+            response = model.generate_content(prompt)
+            await update.message.reply_text(f"📝 إليك الحلول الجاهزة لنسخها في المنصة:\n\n{response.text}")
+            user_data[user_id]['step'] = 'activated' 
         except Exception as e:
             await update.message.reply_text("عذراً، محرك الحلول مضغوط حالياً، من فضلك أعد إرسال الرسالة السابقة.")
 
-# 4. استقبال صورة التحويل وإرسالها لك أنت كأدمن للموافقة
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id in user_data and user_data[user_id].get('step') == 'wait_payment':
-        # إرسال الإيصال لحسابك الشخصي
-        await context.bot.send_photo(chat_id=ADMIN_ID,
+        await context.bot.send_photo(
+            chat_id=ADMIN_ID,
             photo=update.message.photo[-1].file_id,
             caption=f"💰 إشعار تحويل جديد من الطالب: {user_id}\n"
                     f"طلب حل عدد فصول: {user_data[user_id].get('chapters_count')}\n\n"
@@ -90,14 +88,11 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"/activate {user_id}"
         )
         await update.message.reply_text("📥 تم استلام إيصال التحويل بنجاح! جاري مراجعته والتحقق من وصول الأموال للمحفظة، وسيبدأ البوت بالحل فوراً خلال دقائق.")
-
-# أمر التفعيل الخاص بك (الأدمن)
 async def activate_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id == ADMIN_ID:
         try:
             target_id = int(context.args[0])
             user_data[target_id]['step'] = 'activated'
-            # إرسال رسالة تفعيل للطالب تلقائياً
             await context.bot.send_message(
                 chat_id=target_id, 
                 text="✅ رائع! تأكدنا من وصول الأموال. من فضلك أرسل أي رسالة أو اضغط هنا ليطلب منك البوت بيانات حساب المنصة ويبدأ الحل فوراً!"
