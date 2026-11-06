@@ -7,7 +7,7 @@ import json
 user_data = {}
 
 # ⚠️ ضع هنا الـ ID الشخصي الخاص بك لتستقبل عليه إشعارات الدفع وصور الإيصالات
-ADMIN_ID = 123456789  
+ADMIN_ID = 8684915103
 
 PRICE_PER_CHAPTER = 4 
 VODAFONE_CASH_NUM = "01129549934" 
